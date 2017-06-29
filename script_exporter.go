@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"gopkg.in/yaml.v2"
@@ -10,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"regexp"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -101,44 +99,8 @@ func runScripts(scripts []*Script) []*Measurement {
 	return measurements
 }
 
-func scriptFilter(scripts []*Script, name, pattern string) (filteredScripts []*Script, err error) {
-	if name == "" && pattern == "" {
-		err = errors.New("`name` or `pattern` required")
-		return
-	}
-
-	var patternRegexp *regexp.Regexp
-
-	if pattern != "" {
-		patternRegexp, err = regexp.Compile(pattern)
-
-		if err != nil {
-			return
-		}
-	}
-
-	for _, script := range scripts {
-		if script.Name == name || (pattern != "" && patternRegexp.MatchString(script.Name)) {
-			filteredScripts = append(filteredScripts, script)
-		}
-	}
-
-	return
-}
-
 func scriptRunHandler(w http.ResponseWriter, r *http.Request, config *Config) {
-	params := r.URL.Query()
-	name := params.Get("name")
-	pattern := params.Get("pattern")
-
-	scripts, err := scriptFilter(config.Scripts, name, pattern)
-
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
-
-	measurements := runScripts(scripts)
+	measurements := runScripts(config.Scripts)
 
 	for _, measurement := range measurements {
 		fmt.Fprintf(w, "script_duration_seconds{script=\"%s\"} %f\n", measurement.Script.Name, measurement.Duration)
@@ -182,9 +144,9 @@ func main() {
 		}
 	}
 
-	http.Handle("/metrics", prometheus.Handler())
-
-	http.HandleFunc("/probe", func(w http.ResponseWriter, r *http.Request) {
+/*	http.Handle("/metrics", prometheus.Handler())
+ */
+	http.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
 		scriptRunHandler(w, r, &config)
 	})
 
